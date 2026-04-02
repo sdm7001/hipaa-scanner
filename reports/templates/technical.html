@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    @page { size: letter; margin: 0.85in; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1f2937; font-size: 10pt; line-height: 1.5; }
+    .header { padding-bottom: 20px; border-bottom: 3px solid #4f46e5; margin-bottom: 24px; }
+    .header h1 { font-size: 18pt; color: #1e1b4b; font-weight: 700; }
+    .header p { color: #6b7280; font-size: 9pt; }
+    h2 { font-size: 13pt; color: #1e1b4b; margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
+    h3 { font-size: 11pt; color: #374151; margin: 14px 0 8px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9pt; }
+    th { background: #f3f4f6; text-align: left; padding: 6px 8px; border: 1px solid #e5e7eb; font-weight: 600; }
+    td { padding: 6px 8px; border: 1px solid #e5e7eb; vertical-align: top; }
+    tr:nth-child(even) { background: #f9fafb; }
+    .badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 8pt; font-weight: 600; color: white; }
+    .badge-critical { background: #dc2626; }
+    .badge-high { background: #ea580c; }
+    .badge-medium { background: #ca8a04; }
+    .badge-low { background: #6b7280; }
+    .script { font-family: 'Courier New', monospace; background: #1e1b4b; color: #a5b4fc; padding: 6px 10px; border-radius: 4px; font-size: 8pt; margin-top: 4px; word-break: break-all; }
+    .page-break { page-break-before: always; }
+    .footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: 8pt; color: #9ca3af; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>HIPAA Compliance Report — Technical Detail</h1>
+  <p>
+    Client: <strong>{{ client.name if client else 'Unknown' }}</strong> &nbsp;·&nbsp;
+    Scan Date: {{ scan.completed_at.strftime('%Y-%m-%d %H:%M UTC') if scan.completed_at else 'N/A' }} &nbsp;·&nbsp;
+    Score: <strong>{{ score | round(1) }}/100</strong> &nbsp;·&nbsp;
+    Risk: <strong>{{ risk_level }}</strong> &nbsp;·&nbsp;
+    Environment: {{ scan.environment_type }}
+  </p>
+</div>
+
+<h2>Summary Statistics</h2>
+<table>
+  <tr>
+    <th>Metric</th><th>Value</th>
+    <th>Metric</th><th>Value</th>
+  </tr>
+  <tr>
+    <td>Hosts Scanned</td><td>{{ scan.hosts_scanned }}</td>
+    <td>Hosts Failed</td><td>{{ scan.hosts_failed }}</td>
+  </tr>
+  <tr>
+    <td>Total Checks</td><td>{{ scan.total_checks }}</td>
+    <td>Checks Passed</td><td>{{ scan.checks_passed }}</td>
+  </tr>
+  <tr>
+    <td>Critical Findings</td><td style="color:#dc2626; font-weight:600">{{ scan.findings_critical }}</td>
+    <td>High Findings</td><td style="color:#ea580c; font-weight:600">{{ scan.findings_high }}</td>
+  </tr>
+</table>
+
+{% for category, cat_findings in findings_by_category.items() %}
+<h2>{{ category }}</h2>
+
+{% set failures = cat_findings | selectattr('result', 'eq', 'fail') | list %}
+{% if failures %}
+<table>
+  <thead>
+    <tr>
+      <th style="width:8%">Check ID</th>
+      <th style="width:25%">Check Name</th>
+      <th style="width:8%">Severity</th>
+      <th style="width:15%">Machine</th>
+      <th style="width:25%">Details</th>
+      <th style="width:19%">HIPAA Ref</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in failures %}
+    <tr>
+      <td>{{ f.check_id }}</td>
+      <td>
+        {{ f.check_name }}
+        {% if f.remediation_script %}
+        <div class="script">{{ f.remediation_script }}</div>
+        {% endif %}
+      </td>
+      <td><span class="badge badge-{{ f.severity.value }}">{{ f.severity.value | upper }}</span></td>
+      <td>{{ f.target }}</td>
+      <td>{{ f.details }}</td>
+      <td>{{ f.hipaa_reference }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#16a34a; margin-bottom:12px;">✓ All checks passed in this category.</p>
+{% endif %}
+
+{% endfor %}
+
+<div class="page-break"></div>
+<h2>Remediation Action Plan</h2>
+<p style="margin-bottom:12px;">All findings sorted by severity. Items are linked to HIPAA CFR sections for audit documentation.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Finding</th>
+      <th>Severity</th>
+      <th>HIPAA Ref</th>
+      <th>Recommended Action</th>
+      <th>PowerShell Fix</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in findings %}
+    {% if f.result == 'fail' %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ f.check_name }}<br><small style="color:#6b7280">{{ f.target }}</small></td>
+      <td><span class="badge badge-{{ f.severity.value }}">{{ f.severity.value | upper }}</span></td>
+      <td>{{ f.hipaa_reference }}</td>
+      <td>{{ f.remediation }}</td>
+      <td>{% if f.remediation_script %}<span class="script">{{ f.remediation_script[:80] }}{% if f.remediation_script | length > 80 %}…{% endif %}</span>{% endif %}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="footer">
+  Confidential &nbsp;·&nbsp; Prepared for {{ client.name if client else 'Client' }} &nbsp;·&nbsp;
+  HIPAA Scanner Platform v{{ '1.0.0' }} &nbsp;·&nbsp; Scan {{ scan.id }}
+</div>
+
+</body>
+</html>
