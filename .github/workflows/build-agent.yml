@@ -30,12 +30,22 @@ jobs:
           name: HIPAAScanner-Windows
           path: agent/dist/HIPAAScanner.exe
 
+      - name: Delete old release if exists
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gh release delete agent-latest --yes 2>$null || true
+          git push origin :refs/tags/agent-latest 2>$null || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: agent-latest
           name: HIPAA Scanner Agent (Latest)
+          prerelease: false
+          draft: false
           body: |
             ## HIPAA Network Scanner Agent
 
