@@ -90,6 +90,7 @@ class ScanReport(BaseModel):
     targets_failed: int = 0
     overall_score: float = 0.0
     risk_level: str = "UNKNOWN"
+    targets: list[Target] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     category_scores: list[CategoryScore] = Field(default_factory=list)
     summary: Optional[ScanSummary] = None

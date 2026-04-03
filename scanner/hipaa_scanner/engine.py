@@ -135,6 +135,7 @@ class HipaaScanner:
                     progress.advance(task)
 
         report.targets_failed = failed_targets
+        report.targets = targets
         report.findings = all_findings
         report.completed_at = datetime.now(timezone.utc)
 
@@ -180,20 +181,49 @@ class HipaaScanner:
                 console.print(f"[yellow]⚠[/yellow] AD computer discovery failed: {e} — using provided host list")
 
         # Workgroup / manual mode: resolve provided hostnames
+        candidate_ips: list[str] = []
+        hostname_map: dict[str, str] = {}  # ip → original hostname
+
         for host in host_list:
             if "/" in host:
-                # CIDR range — expand
                 import ipaddress
                 for ip in ipaddress.ip_network(host, strict=False).hosts():
-                    targets.append(Target(hostname=str(ip), ip_address=str(ip)))
+                    candidate_ips.append(str(ip))
+                    hostname_map[str(ip)] = str(ip)
             else:
                 try:
                     ip = socket.gethostbyname(host)
                 except socket.gaierror:
                     ip = host
-                targets.append(Target(hostname=host, ip_address=ip))
+                candidate_ips.append(ip)
+                hostname_map[ip] = host
+
+        # Ping sweep — filter to live hosts only (avoids wasting WinRM attempts on dead IPs)
+        live_ips = self._ping_sweep(candidate_ips)
+        if len(candidate_ips) > 1:
+            console.print(
+                f"[blue]Ping sweep: {len(live_ips)}/{len(candidate_ips)} hosts responded[/blue]"
+            )
+
+        for ip in live_ips:
+            hostname = hostname_map.get(ip, ip)
+            targets.append(Target(hostname=hostname, ip_address=ip))
 
         return targets
+
+    def _ping_sweep(self, ip_list: list[str]) -> list[str]:
+        """Return IPs that respond to ping (ICMP) using nmap. Falls back to full list on error."""
+        if not ip_list:
+            return ip_list
+        try:
+            import nmap
+            nm = nmap.PortScanner()
+            # -sn = ping scan (no port scan), -T4 = aggressive timing
+            nm.scan(hosts=" ".join(ip_list), arguments="-sn -T4 --max-retries 1 --host-timeout 5s")
+            return [host for host in nm.all_hosts() if nm[host].state() == "up"]
+        except Exception as e:
+            console.print(f"[yellow]⚠[/yellow] Ping sweep unavailable ({e}) — scanning all targets")
+            return ip_list
 
     def _scan_target(self, target: Target, context: ScanContext) -> list[Finding]:
         """Run all applicable checks against a single target."""

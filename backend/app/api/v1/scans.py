@@ -15,6 +15,14 @@ from ...models.user import User
 router = APIRouter(prefix="/scans", tags=["scans"])
 
 
+class TargetPayload(BaseModel):
+    hostname: str
+    ip_address: str
+    role: str = "workstation"
+    os_version: str | None = None
+    os_build: str | None = None
+
+
 class ScanUploadPayload(BaseModel):
     """Matches ScanReport from scanner engine."""
     scanner_version: str
@@ -27,6 +35,7 @@ class ScanUploadPayload(BaseModel):
     targets_failed: int
     overall_score: float
     risk_level: str
+    targets: list[TargetPayload] = []
     findings: list[dict]
     summary: dict | None = None
 
@@ -95,18 +104,36 @@ async def upload_scan(
     )
     db.add(scan)
 
+    # Create Host records and build hostname → host_id lookup for finding linkage
+    host_map: dict[str, str] = {}  # hostname → host.id
+    for t in payload.targets:
+        host = Host(
+            scan_id=scan.id,
+            hostname=t.hostname,
+            ip_address=t.ip_address,
+            os_version=t.os_version,
+            os_build=t.os_build,
+            role=t.role,
+            scan_status="completed",
+        )
+        db.add(host)
+        await db.flush()  # populate host.id
+        host_map[t.hostname] = host.id
+
     # Create Finding records (only failures + errors for storage efficiency)
     for f_data in payload.findings:
         if f_data.get("result") in ("fail", "error"):
+            target_hostname = f_data.get("target", "")
             finding = Finding(
                 scan_id=scan.id,
+                host_id=host_map.get(target_hostname),
                 check_id=f_data.get("check_id", ""),
                 check_name=f_data.get("check_name", ""),
                 category=f_data.get("category", ""),
                 hipaa_reference=f_data.get("hipaa_reference", ""),
                 severity=f_data.get("severity", "low"),
                 result=f_data.get("result", "fail"),
-                target=f_data.get("target", ""),
+                target=target_hostname,
                 details=f_data.get("details", ""),
                 remediation=f_data.get("remediation"),
                 remediation_script=f_data.get("remediation_script"),
@@ -116,7 +143,7 @@ async def upload_scan(
             db.add(finding)
 
     await db.commit()
-    return {"scan_id": scan.id, "message": "Scan results uploaded successfully"}
+    return {"scan_id": scan.id, "hosts_created": len(host_map), "message": "Scan results uploaded successfully"}
 
 
 @router.get("/")

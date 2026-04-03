@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shield, Users, BarChart3, FileText, Settings, LogOut, Menu, X, ChevronDown } from 'lucide-react'
+import { Shield, Users, BarChart3, FileText, Settings, LogOut, Menu, X, ClipboardList } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '@/store/auth'
 import { api } from '@/lib/api'
@@ -9,6 +9,8 @@ const NAV = [
   { href: '#/clients', label: 'Clients', icon: Users },
   { href: '#/scans', label: 'Scans', icon: Shield },
   { href: '#/reports', label: 'Reports', icon: FileText },
+  { href: '#/audit-log', label: 'Audit Log', icon: ClipboardList },
+  { href: '#/settings', label: 'Settings', icon: Settings },
 ]
 
 function NavItem({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {

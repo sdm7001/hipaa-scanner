@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
@@ -64,10 +64,39 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(response: Response, request_obj=None, db: AsyncSession = Depends(get_db)):
-    from fastapi import Request
-    # This needs the request to get the cookie
-    raise HTTPException(status_code=501, detail="Use cookie-based refresh endpoint")
+async def refresh(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    from jose import JWTError
+
+    token = request.cookies.get(REFRESH_COOKIE)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
+
+    try:
+        payload = decode_token(token)
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+
+    user_id: str = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id, User.is_active == True))
+    user: User | None = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    new_access_token = create_access_token({"sub": user.id, "msp_id": user.msp_id, "role": user.role.value})
+    new_refresh_token = create_refresh_token({"sub": user.id})
+
+    response.set_cookie(
+        key=REFRESH_COOKIE,
+        value=new_refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,
+    )
+    return TokenResponse(access_token=new_access_token)
 
 
 @router.post("/logout")

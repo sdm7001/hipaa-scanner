@@ -5,6 +5,9 @@ import Dashboard from './pages/Dashboard'
 import Clients from './pages/Clients'
 import Scans from './pages/Scans'
 import ScanDetail from './pages/ScanDetail'
+import Reports from './pages/Reports'
+import Settings from './pages/Settings'
+import AuditLog from './pages/AuditLog'
 import AppShell from './components/layout/AppShell'
 import { useAuthStore } from './store/auth'
 import { api } from './lib/api'
@@ -88,6 +91,9 @@ function Router() {
     if (clientDetailMatch) return <ClientDetail clientId={clientDetailMatch[1]} />
     if (path === '/clients') return <Clients />
     if (path === '/scans') return <Scans />
+    if (path === '/reports') return <Reports />
+    if (path === '/settings') return <Settings />
+    if (path === '/audit-log') return <AuditLog />
     return <Dashboard />
   })()
 
