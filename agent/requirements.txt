@@ -1,0 +1,3 @@
+requests>=2.31
+pywinrm>=0.4.3
+pyinstaller>=6.0

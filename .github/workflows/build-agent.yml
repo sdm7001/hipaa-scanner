@@ -1,0 +1,63 @@
+name: Build Windows Agent EXE
+
+on:
+  push:
+    paths:
+      - 'agent/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller requests pywinrm
+
+      - name: Build EXE
+        working-directory: agent
+        run: pyinstaller hipaa_agent.spec
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HIPAAScanner-Windows
+          path: agent/dist/HIPAAScanner.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: agent-latest
+          name: HIPAA Scanner Agent (Latest)
+          body: |
+            ## HIPAA Network Scanner Agent
+
+            **Download `HIPAAScanner.exe` and run it on any Windows machine inside the client network.**
+
+            ### Setup
+            1. Run `HIPAAScanner.exe` — no installation required
+            2. In the **Configuration** tab, enter:
+               - Portal URL: `https://hipaa.texmg.com/api/v1`
+               - API Key (from your portal Settings page)
+               - Client ID (from the client record in the portal)
+               - Network range to scan (e.g. `192.168.1.0/24`)
+               - Domain admin credentials for WinRM access
+            3. Click **Save Configuration**
+            4. Go to **Run Scan** tab → click **Start Network Scan**
+            5. When complete, click **Upload Results to Portal**
+
+            ### Requirements
+            - Windows 10/11 or Windows Server 2016+
+            - WinRM must be enabled on target machines (`winrm quickconfig`)
+            - Domain admin or local admin credentials for remote checks
+          files: agent/dist/HIPAAScanner.exe
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
